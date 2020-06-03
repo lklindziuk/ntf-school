@@ -778,7 +778,7 @@ def main():
     # -----------------------------------------------
     X_approx = X_approx_ks.totensor()
     X_err = (X - X_approx).norm() / X.norm()
-    print "Error:", X_err
+    print("Error:", X_err)
 
 if __name__ == "__main__":
     main()
