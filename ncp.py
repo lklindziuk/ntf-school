@@ -430,8 +430,9 @@ def getGradient(X, F, nWay, r):
 def getProjGradient(X, F, nWay, r):
     pGrad = []
     for k in range(nWay):
-        ways = range(nWay)
-        ways.remove(k)
+        #ways = range(nWay)
+        #ways.remove(k)
+        ways = [i for i in range(nWay) if i != k] 
         XF = X.uttkrp(F, k)
         # Compute the inner-product matrix
         FF = ones((r, r))
