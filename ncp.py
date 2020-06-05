@@ -71,7 +71,7 @@ def normalEqComb(AtA, AtB, PassSet=None):
     """
     if AtB.size == 0:
         Z = np.zeros([])
-    elif (PassSet == None) or np.all(PassSet):
+    elif (PassSet is None) or np.all(PassSet):
         Z = solve(AtA, AtB)
     else:
         Z = np.zeros(AtB.shape)
@@ -415,8 +415,9 @@ def nnlsm_blockpivot(A, B, isInputProd=0, init=None):
 def getGradient(X, F, nWay, r):
     grad = []
     for k in range(nWay):
-        ways = range(nWay)
-        ways.remove(k)
+        #ways = range(nWay)
+        #ways.remove(k)
+        ways = [i for i in range(nWay) if i != k] 
         XF = X.uttkrp(F, k)
         # Compute the inner-product matrix
         FF = ones((r, r))
