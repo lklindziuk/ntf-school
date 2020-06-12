@@ -125,11 +125,11 @@ def column_group_sub(B, i, cols):
         return [cols]
     if i == (B.shape[0] - 1):
         col_trues = cols[vec.nonzero()[0]]
-        col_falses = cols[(-vec).nonzero()[0]]
+        col_falses = cols[(~vec).nonzero()[0]]
         return [col_trues, col_falses]
     else:
         col_trues = cols[vec.nonzero()[0]]
-        col_falses = cols[(-vec).nonzero()[0]]
+        col_falses = cols[(~vec).nonzero()[0]]
         after = column_group_sub(B, i + 1, col_trues)
         after.extend(column_group_sub(B, i + 1, col_falses))
     return after
@@ -482,10 +482,10 @@ class anls_bpp(object):
 
     def iterSolver(self, X, F, FF_init, nWay, r, orderWays):
         for k in range(nWay):
-            #curWay = orderWays[k]
+            curWay = orderWays[k]
             #ways = range(nWay)
             #ways.remove(curWay)
-            ways = [i for i in range(nWay) if i != orderWays[k]] 
+            ways = [i for i in range(nWay) if i != curWay] 
             XF = X.uttkrp(F, curWay)
             # Compute the inner-product matrix
             FF = ones((r, r))
