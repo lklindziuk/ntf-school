@@ -30,6 +30,8 @@ Created on Nov 2013
 @author: Andre Panisson
 @contact: panisson@gmail.com
 @organization: ISI Foundation, Torino, Italy
+
+With contributions of Tonmoy Saikia
 '''
 
 import numpy as np
@@ -44,6 +46,14 @@ def find(condition):
     res, = np.nonzero(np.ravel(condition))
     return res
 
+def solve(AtA, AtB):
+    try:
+        soln = nla.solve(AtA, AtB)
+    except np.linalg.LinAlgError:
+        soln = nla.lstsq(AtA, AtB)[0]
+    except Exception as e:
+        raise e
+    return soln
 
 def normalEqComb(AtA, AtB, PassSet=None):
     """ Solve many systems of linear equations using combinatorial grouping.
@@ -61,14 +71,14 @@ def normalEqComb(AtA, AtB, PassSet=None):
     """
     if AtB.size == 0:
         Z = np.zeros([])
-    elif (PassSet == None) or np.all(PassSet):
-        Z = nla.solve(AtA, AtB)
+    elif (PassSet is None) or np.all(PassSet):
+        Z = solve(AtA, AtB)
     else:
         Z = np.zeros(AtB.shape)
         if PassSet.shape[1] == 1:
             if np.any(PassSet):
                 cols = PassSet.nonzero()[0]
-                Z[cols] = nla.solve(AtA[np.ix_(cols, cols)], AtB[cols])
+                Z[cols] = solve(AtA[np.ix_(cols, cols)], AtB[cols])
         else:
             #
             # Both _column_group_loop() and _column_group_recursive() work well.
@@ -89,7 +99,7 @@ def normalEqComb(AtA, AtB, PassSet=None):
                     # Usage example of scipy.linalg.cho_solve:
                     # Z[ix1] = sla.cho_solve(sla.cho_factor(AtA[ix2]),AtB[ix1])
                     #
-                    Z[ix1] = nla.solve(AtA[ix2], AtB[ix1])
+                    Z[ix1] = solve(AtA[ix2], AtB[ix1])
     return Z
 
 
@@ -405,8 +415,9 @@ def nnlsm_blockpivot(A, B, isInputProd=0, init=None):
 def getGradient(X, F, nWay, r):
     grad = []
     for k in range(nWay):
-        ways = range(nWay)
-        ways.remove(k)
+        #ways = range(nWay)
+        #ways.remove(k)
+        ways = [i for i in range(nWay) if i != k] 
         XF = X.uttkrp(F, k)
         # Compute the inner-product matrix
         FF = ones((r, r))
@@ -419,8 +430,9 @@ def getGradient(X, F, nWay, r):
 def getProjGradient(X, F, nWay, r):
     pGrad = []
     for k in range(nWay):
-        ways = range(nWay)
-        ways.remove(k)
+        #ways = range(nWay)
+        #ways.remove(k)
+        ways = [i for i in range(nWay) if i != k] 
         XF = X.uttkrp(F, k)
         # Compute the inner-product matrix
         FF = ones((r, r))
@@ -434,7 +446,7 @@ def getProjGradient(X, F, nWay, r):
 
 class anls_asgroup(object):
 
-    def initializer(self, X, F, nWay, orderWays):
+    def initializer(self, X, F, nWay, orderWays, r):
         F[orderWays[0]] = zeros(F[orderWays[0]].shape)
         FF = []
         for k in range(nWay):
@@ -461,7 +473,7 @@ class anls_asgroup(object):
 
 class anls_bpp(object):
 
-    def initializer(self, X, F, nWay, orderWays):
+    def initializer(self, X, F, nWay, orderWays, r):
         F[orderWays[0]] = zeros(F[orderWays[0]].shape)
         FF = []
         for k in range(nWay):
@@ -470,9 +482,10 @@ class anls_bpp(object):
 
     def iterSolver(self, X, F, FF_init, nWay, r, orderWays):
         for k in range(nWay):
-            curWay = orderWays[k]
-            ways = range(nWay)
-            ways.remove(curWay)
+            #curWay = orderWays[k]
+            #ways = range(nWay)
+            #ways.remove(curWay)
+            ways = [i for i in range(nWay) if i != orderWays[k]] 
             XF = X.uttkrp(F, curWay)
             # Compute the inner-product matrix
             FF = ones((r, r))
@@ -483,6 +496,62 @@ class anls_bpp(object):
             FF_init[curWay] = (F[curWay].T.dot(F[curWay]))
         return F, FF_init
 
+class mu(object):
+    def initializer(self, X, F, nWay, orderWays, r):
+        FF = []
+        for k in range(nWay):
+            FF.append((F[k].T.dot(F[k])))
+        return F, FF
+
+    def iterSolver(self, X, F, FF_init, nWay, r, orderWays):
+        eps = 1e-16
+        for k in range(nWay):
+            curWay = orderWays[k]
+            ways = range(nWay)
+            ways.remove(curWay)
+            XF = X.uttkrp(F, curWay)
+            FF = ones((r, r))
+            for i in ways:
+                FF = FF * FF_init[i]
+            F[curWay] = F[curWay]*XF/(F[curWay].dot(FF) + eps)
+            FF_init[curWay] = (F[curWay].T.dot(F[curWay]))
+        return F, FF_init
+
+class hals(object):
+    def initializer(self, X, F, nWay, orderWays, r):
+        d = ones((1, r))
+        for k in range(nWay-1):
+            curWay = orderWays[k]
+            norm2 = np.sqrt(np.sum(F[curWay]**2, axis=0))
+            F[curWay] = F[curWay]/kron(ones((F[curWay].shape[0],1)),norm2) # repmat(a,2,3) -- kron(ones(2,3),a)
+            d = d*norm2
+        curWay = orderWays[-1]
+        F[curWay] = F[curWay]*kron(ones((F[curWay].shape[0],1)),d)
+        FF = []
+        for k in range(nWay):
+            FF.append((F[k].T.dot(F[k])))
+        return F, FF
+
+    def iterSolver(self, X, F, FF_init, nWay, r, orderWays):
+        eps = 1e-16
+        d = np.sum(F[orderWays[-1]]**2, axis=0)
+        for k in range(nWay):
+            curWay = orderWays[k]
+            ways = range(nWay)
+            ways.remove(curWay)
+            XF = X.uttkrp(F, curWay)
+            FF = ones((r, r))
+            for i in ways:
+                FF = FF * FF_init[i]
+            if k < nWay-1:
+                for j in range(r):
+                    F[curWay][:,j] = np.maximum(d[j]*F[curWay][:,j] + XF[:,j]- F[curWay].dot(FF[:,j]), eps)
+                    F[curWay][:,j] = F[curWay][:,j]/np.linalg.norm(F[curWay][:,j])
+            else:
+                for j in range(r):
+                    F[curWay][:,j] = np.maximum(F[curWay][:,j] + XF[:,j] - F[curWay].dot(FF[:,j]), eps)
+            FF_init[curWay] = (F[curWay].T.dot(F[curWay]))
+        return F, FF_init
 
 def getStopCriterion(pGrad, nWay, nr_grad_all):
     retVal = np.sum(np.linalg.norm(pGrad[i], 'fro') ** 2
@@ -590,11 +659,15 @@ def nonnegative_tensor_factorization(X, r, method='anls_bpp',
         method = anls_bpp()
     elif method == "anls_asgroup":
         method = anls_asgroup()
+    elif method == "mu":
+        method = mu()
+    elif method == "hals":
+        method = hals()
     else:
         raise Exception("Unknown method")
 
     # Execute initializer
-    F_cell, FF_init = method.initializer(X, F_cell, nWay, orderWays)
+    F_cell, FF_init = method.initializer(X, F_cell, nWay, orderWays, r)
 
     tStart = time.time()
 
